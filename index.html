@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+  <meta charset="UTF-8">
+  <title>Nibir Cable Network | Smart ISP Manager</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Firebase -->
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.6.10/firebase-database-compat.js"></script>
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    :root { --main-bg: #e3f2fd; --accent: #1976d2; }
+    body { background: var(--main-bg); margin:0; font-family:sans-serif; }
+    #login-bg { background: #bbdefb; height:100vh; display:flex; align-items:center; justify-content:center; }
+    #login-card { background:#fff; padding:2rem; border-radius:10px; box-shadow:0 0 24px 2px #0001; width:320px; }
+    #app-logo { width:70px; border-radius:50%; margin-bottom:.7rem; }
+    .dashboard {display:none;}
+    #sidebar { background: #1565c0; color:#fff; width:210px; min-height:100vh; float:left; }
+    #sidebar h2, #sidebar p { margin: 8px 0 4px 0; text-align:center;}
+    #sidebar img {display:block; margin:20px auto 4px auto; width:60px; border-radius:50%;}
+    #sidebar ul{list-style:none;padding:0;}
+    #sidebar li{padding:10px 0 10px 20px;cursor:pointer; position:relative;}
+    #sidebar li.active, #sidebar li:hover {background:#1976d2;}
+    .user-info{color:#1565c0; margin:0 0 10px 0;}
+    .hidden{display:none;}
+    /* Modal */
+    .modal{position:fixed;top:0;left:0;right:0;bottom:0;background:#0006;display:flex;align-items:center;justify-content:center;z-index:99;}
+    .modal-content{background:#fff;padding:22px 16px;border-radius:9px;min-width:240px;box-shadow:0 2px 16px #0003;}
+    .modal-content input, .modal-content select{width:95%;padding:6px;}
+    .modal-content button{margin-top:8px;}
+    #subfolderTabs{display:flex;gap:8px;margin-bottom:10px;}
+    .subTab{background:#f1f8e9;border:none;padding:7px 20px;border-radius:6px;cursor:pointer;}
+    .subTab.active,.subTab:hover{background:#c8e6c9;}
+    #customerList{margin-top:10px;width:100%;border-collapse:collapse;}
+    #customerList th,#customerList td{padding:7px 8px;border-bottom:1px solid #e0e0e0;}
+    #customerList tr:hover{background:#f5f5f5;}
+    .actionBtns span{cursor:pointer;margin-right:8px;}
+    .actionBtns span:hover{color:#1976d2;}
+    /* ISP modal */
+    #ispModalList{list-style:none;padding:0;}
+    #ispModalList li{background:#e3f2fd; margin:8px 0; padding:8px 11px; border-radius:5px; cursor:pointer; border:1px solid #bbdefb;}
+    #ispModalList li:hover{background:#90caf9;}
+    #ispModalPackages select{width:98%;margin-top:8px;}
+    #ispModalPackages{margin-top:12px;}
+    #ispModalConfirmBtn{background:#1976d2;color:#fff;border:none;border-radius:5px;padding:6px 17px;margin-top:10px;}
+    #ispModalCancelBtn{background:#eee;border:none;border-radius:5px;padding:6px 17px;margin-top:10px;margin-left:8px;}
+    #ispModalTitle{margin-bottom:8px;}
+    @media(max-width:700px){
+      #sidebar{width:100vw;min-height:auto;height:auto;float:none;}
+      #main-content{margin-left:0;}
+    }
+  </style>
+</head>
+<body>
+  <!-- Login Screen -->
+  <div id="login-bg">
+    <div id="login-card">
+      <img id="login-logo" src="logo.png" alt="Logo" />
+      <h2>লগইন করুন</h2>
+      <form id="loginForm">
+        <input type="text" id="username" placeholder="Username" required><br>
+        <input type="password" id="password" placeholder="Password" required><br>
+        <label><input type="checkbox" id="rememberMe"> Remember Me</label><br>
+        <button type="submit">Login</button>
+      </form>
+      <div id="login-msg" style="color:red;"></div>
+    </div>
+  </div>
+
+  <!-- Dashboard & Navigation -->
+  <div class="dashboard" id="dashboard">
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <img id="sidebar-logo" src="logo.png" alt="Logo" />
+      <h2>Nibir Cable Network</h2>
+      <p style="font-size:13px;">বি.কে. বাড়ি, সিট পাড়া, মির্জাপুর,<br>গাজীপুর সদর, ঢাকা</p>
+      <div class="user-info" id="userRole"></div>
+      <ul id="folderList">
+        <li class="active" onclick="showFolder('customer')">গ্রাহক</li>
+        <li onclick="showFolder('isp')">ISP</li>
+        <li onclick="showFolder('bill')">বিল</li>
+      </ul>
+      <li onclick="logout()" style="background:#b71c1c;">লগআউট</li>
+    </div>
+    <!-- Main Content -->
+    <div id="main-content">
+      <!-- Customer Folder -->
+      <div id="customerFolder">
+        <h2>গ্রাহক ফোল্ডার</h2>
+        <div id="subfolderTabs">
+          <button class="subTab active" onclick="showSubTab('all')">সমস্ত গ্রাহক</button>
+          <button class="subTab" onclick="showSubTab('new')">নতুন গ্রাহক</button>
+          <button class="subTab" onclick="showSubTab('paid')">পরিশোধকারি</button>
+          <button class="subTab" onclick="showSubTab('unpaid')">অপরিশোধিত</button>
+        </div>
+        <div id="subfolderContent"></div>
+      </div>
+      <!-- ISP Folder -->
+      <div id="ispFolder" style="display:none;">
+        <h2>ISP ফোল্ডার</h2>
+        <button onclick="showISPForm()">+ নতুন ISP যোগ</button>
+        <div id="ispListContent"></div>
+      </div>
+      <!-- Bill Folder Placeholder -->
+      <div id="billFolder" style="display:none;">
+        <h2>বিল ফোল্ডার (ডেমো)</h2>
+        <p>এখানে বিল সাবফোল্ডার ও ডিটেইলস ফর্ম আসবে।</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Customer Add/Edit/Details -->
+  <div class="modal hidden" id="customerModal">
+    <div class="modal-content">
+      <h3 id="customerModalTitle">নতুন গ্রাহক যোগ</h3>
+      <form id="customerForm">
+        <input type="hidden" id="customerId">
+        <input type="text" id="cName" placeholder="নাম" required><br>
+        <input type="text" id="cMobile" placeholder="মোবাইল" required><br>
+        <input type="text" id="cAddress" placeholder="ঠিকানা"><br>
+        <button type="button" onclick="openISPModal()" style="margin:8px 0 8px 0;">ISP সিলেক্ট করুন</button><br>
+        <input type="text" id="cISP" placeholder="ISP" readonly required style="background:#ececec;"><br>
+        <input type="text" id="cPackage" placeholder="প্যাকেজ" readonly required style="background:#ececec;"><br>
+        <input type="number" id="cBill" placeholder="দাম" readonly required style="background:#ececec;"><br>
+        <input type="number" id="cDue" placeholder="ডিউ (বকেয়া)" min="0"><br>
+        <input type="date" id="cDate" placeholder="তারিখ"><br>
+        <button type="submit" id="customerSaveBtn">Save</button>
+        <button type="button" onclick="closeCustomerModal()" style="background:#eee;">Cancel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ISP Select Modal -->
+  <div class="modal hidden" id="ispModal">
+    <div class="modal-content">
+      <div id="ispModalTitle"><b>ISP সিলেক্ট করুন</b></div>
+      <ul id="ispModalList"></ul>
+      <div id="ispModalPackages" style="display:none;">
+        <select id="ispPackageSelect"></select>
+        <div id="ispPackagePrice" style="margin:8px 0;font-weight:bold;"></div>
+        <button id="ispModalConfirmBtn">নিশ্চিত করুন</button>
+        <button id="ispModalCancelBtn" onclick="closeISPModal()">বাতিল</button>
+      </div>
+      <button id="ispModalCancelBtn2" onclick="closeISPModal()" style="margin-top:10px;">বাতিল</button>
+    </div>
+  </div>
+
+  <!-- ISP Add/Edit Modal -->
+  <div class="modal hidden" id="ispFormModal">
+    <div class="modal-content">
+      <h3 id="ispFormTitle">নতুন ISP যোগ</h3>
+      <form id="ispForm">
+        <input type="hidden" id="ispId">
+        <input type="text" id="ispName" placeholder="ISP নাম" required><br>
+        <textarea id="ispPackages" placeholder="প্যাকেজ (প্রতি লাইনে: নাম,দাম)" rows="5" style="width:96%;"></textarea><br>
+        <button type="submit" id="ispSaveBtn">Save</button>
+        <button type="button" onclick="closeISPFormModal()" style="background:#eee;">Cancel</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Customer Details Popup -->
+  <div class="modal hidden" id="customerDetailsModal">
+    <div class="modal-content">
+      <h3 id="cDetailsTitle"></h3>
+      <div id="cDetailsContent"></div>
+      <button onclick="closeCustomerDetailsModal()">Close</button>
+    </div>
+  </div>
+
+  <script>
+    // --------- Firebase Config (DEMO) ---------
+    // Replace below config with your own Firebase project config
+    const firebaseConfig = {
+      apiKey: "AIzaSyA-EXAMPLE",
+      authDomain: "your-app.firebaseapp.com",
+      databaseURL: "https://your-app-default-rtdb.firebaseio.com",
+      projectId: "your-app",
+      storageBucket: "your-app.appspot.com",
+      messagingSenderId: "000000000000",
+      appId: "1:000000000000:web:abcdefghijk"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    // --------- Demo ISP & Packages (Dynamic) ---------
+    let ISPs = JSON.parse(localStorage.getItem('isps')||'null') || [
+      {
+        id: Date.now(),
+        name: "RDPN",
+        packages: [
+          {name: "Start 10Mbps", price: 500},
+          {name: "Lite 12Mbps", price: 700},
+          {name: "Smart 15Mbps", price: 1000},
+          {name: "Next-level 18Mbps", price: 1300},
+          {name: "Boss-level 20Mbps", price: 1500}
+        ]
+      },
+      { id: Date.now()+1, name: "4011", packages: [{name: "Lite 10Mbps", price: 500}] },
+      { id: Date.now()+2, name: "3011", packages: [{name: "Lite 10Mbps", price: 500}] },
+      { id: Date.now()+3, name: "Free-IP", packages: [{name: "Lite 10Mbps", price: 0}] }
+    ];
+
+    // --------- User/Login ---------
+    const users = [
+      {role:'admin', username:'Tofayel Ahmad', password:'01300311561'},
+      {role:'owner', username:'Kobir', password:'01713545228'}
+    ];
+    document.getElementById('loginForm').onsubmit = function(e){
+      e.preventDefault();
+      let uname = document.getElementById('username').value;
+      let pass = document.getElementById('password').value;
+      let user = users.find(u => u.username === uname && u.password === pass);
+      if(user){
+        if(document.getElementById('rememberMe').checked){
+          localStorage.setItem('user', uname);
+        } else {
+          localStorage.removeItem('user');
+        }
+        localStorage.setItem('role', user.role);
+        showDashboard(user.role, uname);
+      } else {
+        document.getElementById('login-msg').innerText = "ভুল ইউজার/পাসওয়ার্ড!";
+      }
+    }
+    function logout(){
+      localStorage.removeItem('user');
+      localStorage.removeItem('role');
+      location.reload();
+    }
+    window.onload = function(){
+      let saved = localStorage.getItem('user');
+      if(saved) document.getElementById('username').value = saved;
+    }
+
+    // --------- Navigation ---------
+    function showFolder(name){
+      document.getElementById('customerFolder').style.display = name==='customer'?'block':'none';
+      document.getElementById('ispFolder').style.display = name==='isp'?'block':'none';
+      document.getElementById('billFolder').style.display = name==='bill'?'block':'none';
+      document.querySelectorAll('#folderList li').forEach(li=>li.classList.remove('active'));
+      if(name==='customer') document.querySelectorAll('#folderList li')[0].classList.add('active');
+      if(name==='isp') document.querySelectorAll('#folderList li')[1].classList.add('active');
+      if(name==='bill') document.querySelectorAll('#folderList li')[2].classList.add('active');
+      if(name==='customer') showSubTab(currentTab);
+      if(name==='isp') renderISPList();
+    }
+
+    // --------- Customer/Subfolder Logic ---------
+    let customers = JSON.parse(localStorage.getItem('customers')||'[]');
+    let currentTab = 'all';
+
+    function showSubTab(tab){
+      currentTab = tab;
+      document.querySelectorAll('.subTab').forEach(btn=>btn.classList.remove('active'));
+      if(tab==='all') document.querySelectorAll('.subTab')[0].classList.add('active');
+      if(tab==='new') document.querySelectorAll('.subTab')[1].classList.add('active');
+      if(tab==='paid') document.querySelectorAll('.subTab')[2].classList.add('active');
+      if(tab==='unpaid') document.querySelectorAll('.subTab')[3].classList.add('active');
+      renderSubfolderContent(tab);
+    }
+
+    function renderSubfolderContent(tab){
+      let html = `<button onclick="showCustomerModal()">+ নতুন গ্রাহক যোগ</button>`;
+      let list = [];
+      if(tab==='all'){
+        list = customers;
+      }
+      if(tab==='new'){
+        const thisMonth = (new Date()).toISOString().slice(0,7);
+        list = customers.filter(c=>c.cDate && c.cDate.slice(0,7)===thisMonth);
+      }
+      if(tab==='paid'){
+        list = customers.filter(c=>c.paid);
+      }
+      if(tab==='unpaid'){
+        list = customers.filter(c=>!c.paid);
+      }
+      html += customerTable(list);
+      document.getElementById('subfolderContent').innerHTML = html || '<p>ডাটা নেই</p>';
+    }
+
+    function customerTable(list){
+      if(!list.length) return '<p>কোনো গ্রাহক নেই</p>';
+      let rows = list.map((c,i)=>`
+        <tr>
+          <td>${i+1}</td>
+          <td><span style="color:#1976d2;cursor:pointer;" onclick="showCustomerDetails('${c.id}')">${c.cName||''}</span></td>
+          <td>${c.cMobile||''}</td>
+          <td>${c.cAddress||''}</td>
+          <td>${c.cISP||''}</td>
+          <td>${c.cPackage||''}</td>
+          <td>${c.cBill||''}</td>
+          <td>${c.cDue||0}</td>
+          <td>${c.cDate||''}</td>
+          <td>${c.paid?'পরিশোধ':'বকেয়া'}</td>
+          <td class="actionBtns">
+            <span title="Edit" onclick="event.stopPropagation(); showCustomerModal('${c.id}')">✏️</span>
+            <span title="Delete" onclick="event.stopPropagation(); deleteCustomer('${c.id}')">🗑️</span>
+            <span title="Pay" onclick="event.stopPropagation(); payCustomer('${c.id}')">💳</span>
+          </td>
+        </tr>
+      `).join('');
+      return `<table id="customerList">
+        <tr><th>#</th><th>নাম</th><th>মোবাইল</th><th>ঠিকানা</th><th>ISP</th><th>প্যাকেজ</th><th>দাম</th><th>ডিউ</th><th>যোগের তারিখ</th><th>স্টেটাস</th><th>Action</th></tr>
+        ${rows}
+      </table>`;
+    }
+
+    function showCustomerModal(id){
+      document.getElementById('customerModal').classList.remove('hidden');
+      document.getElementById('customerModalTitle').textContent = id ? "গ্রাহক এডিট করুন" : "নতুন গ্রাহক যোগ";
+      if(id){
+        let c = customers.find(x=>x.id==id);
+        document.getElementById('customerId').value = c.id;
+        document.getElementById('cName').value = c.cName||'';
+        document.getElementById('cMobile').value = c.cMobile||'';
+        document.getElementById('cAddress').value = c.cAddress||'';
+        document.getElementById('cISP').value = c.cISP||'';
+        document.getElementById('cPackage').value = c.cPackage||'';
+        document.getElementById('cBill').value = c.cBill||'';
+        document.getElementById('cDue').value = c.cDue||'';
+        document.getElementById('cDate').value = c.cDate||'';
+      }else{
+        document.getElementById('customerId').value = '';
+        document.getElementById('customerForm').reset();
+        document.getElementById('cISP').value = '';
+        document.getElementById('cPackage').value = '';
+        document.getElementById('cBill').value = '';
+      }
+    }
+    function closeCustomerModal(){ document.getElementById('customerModal').classList.add('hidden'); }
+
+    document.getElementById('customerForm').onsubmit = function(e){
+      e.preventDefault();
+      let id = document.getElementById('customerId').value;
+      let obj = {
+        id: id || Date.now(),
+        cName: document.getElementById('cName').value,
+        cMobile: document.getElementById('cMobile').value,
+        cAddress: document.getElementById('cAddress').value,
+        cISP: document.getElementById('cISP').value,
+        cPackage: document.getElementById('cPackage').value,
+        cBill: +document.getElementById('cBill').value,
+        cDue: +document.getElementById('cDue').value || 0,
+        cDate: document.getElementById('cDate').value,
+        paid: id ? customers.find(c=>c.id==id).paid : false
+      };
+      if(id){
+        customers = customers.map(c=>c.id==id?obj:c);
+      }else{
+        customers.push(obj);
+      }
+      saveCustomers();
+      closeCustomerModal();
+      renderSubfolderContent(currentTab);
+      syncOnline('customers', customers);
+    }
+
+    function deleteCustomer(id){
+      if(confirm('আপনি কি ডিলিট করতে চান?')){
+        customers = customers.filter(c=>c.id!=id);
+        saveCustomers();
+        renderSubfolderContent(currentTab);
+        syncOnline('customers', customers);
+      }
+    }
+
+    function showCustomerDetails(id){
+      let c = customers.find(x=>x.id==id);
+      document.getElementById('customerDetailsModal').classList.remove('hidden');
+      document.getElementById('cDetailsTitle').textContent = c.cName;
+      document.getElementById('cDetailsContent').innerHTML = `
+        <b>ঠিকানা:</b> ${c.cAddress||''}<br>
+        <b>মোবাইল:</b> ${c.cMobile||''}<br>
+        <b>ISP:</b> ${c.cISP||''}<br>
+        <b>প্যাকেজ:</b> ${c.cPackage||''}<br>
+        <b>দাম:</b> ${c.cBill||''}<br>
+        <b>ডিউ:</b> ${c.cDue||''}<br>
+        <b>তারিখ:</b> ${c.cDate||''}<br>
+        <b>স্টেটাস:</b> ${c.paid?'পরিশোধ':'বকেয়া'}
+      `;
+    }
+    function closeCustomerDetailsModal(){ document.getElementById('customerDetailsModal').classList.add('hidden'); }
+
+    function payCustomer(id){
+      let c = customers.find(x=>x.id==id);
+      if(!c) return;
+      if(confirm('এই গ্রাহকের বিল পরিশোধ হয়েছে?')){
+        c.paid = true;
+        saveCustomers();
+        renderSubfolderContent(currentTab);
+        syncOnline('customers', customers);
+      }
+    }
+
+    function saveCustomers(){
+      localStorage.setItem('customers', JSON.stringify(customers));
+    }
+
+    // --------- ISP Select Modal Logic ---------
+    let selectedISP = null;
+    let selectedPackage = null;
+    let selectedPrice = null;
+
+    function openISPModal(){
+      selectedISP = null;
+      selectedPackage = null;
+      selectedPrice = null;
+      document.getElementById('ispModal').classList.remove('hidden');
+      document.getElementById('ispModalPackages').style.display = 'none';
+      // List ISPs
+      let ul = document.getElementById('ispModalList');
+      ul.innerHTML = '';
+      ISPs.forEach((isp,idx)=>{
+        let li = document.createElement('li');
+        li.textContent = isp.name;
+        li.onclick = function(){
+          selectedISP = isp;
+          showISPModalPackages(isp);
+        };
+        ul.appendChild(li);
+      });
+    }
+    function closeISPModal(){
+      document.getElementById('ispModal').classList.add('hidden');
+      selectedISP = null;
+      selectedPackage = null;
+      selectedPrice = null;
+    }
+    function showISPModalPackages(isp){
+      document.getElementById('ispModalPackages').style.display = 'block';
+      let select = document.getElementById('ispPackageSelect');
+      select.innerHTML = '';
+      isp.packages.forEach(pkg=>{
+        let opt = document.createElement('option');
+        opt.value = pkg.name;
+        opt.textContent = pkg.name;
+        opt.setAttribute('data-price', pkg.price);
+        select.appendChild(opt);
+      });
+      selectedPackage = isp.packages[0].name;
+      selectedPrice = isp.packages[0].price;
+      document.getElementById('ispPackagePrice').textContent = 'দাম: ' + selectedPrice + ' টাকা';
+      select.onchange = function(){
+        let p = isp.packages.find(pkg=>pkg.name===this.value);
+        selectedPackage = p.name;
+        selectedPrice = p.price;
+        document.getElementById('ispPackagePrice').textContent = 'দাম: ' + selectedPrice + ' টাকা';
+      };
+      document.getElementById('ispModalConfirmBtn').onclick = function(){
+        document.getElementById('cISP').value = selectedISP.name;
+        document.getElementById('cPackage').value = selectedPackage;
+        document.getElementById('cBill').value = selectedPrice;
+        closeISPModal();
+      };
+    }
+
+    // --------- ISP Add/Edit/List ---------
+    function renderISPList(){
+      let html = `<table style="width:100%;margin-top:15px;"><tr><th>ISP</th><th>প্যাকেজ</th><th>Action</th></tr>`;
+      ISPs.forEach(isp=>{
+        html += `<tr>
+          <td>${isp.name}</td>
+          <td>${isp.packages.map(p=>`${p.name} (${p.price})`).join('<br>')}</td>
+          <td>
+            <span style="cursor:pointer;" onclick="showISPForm('${isp.id}')">✏️</span>
+            <span style="cursor:pointer;" onclick="deleteISP('${isp.id}')">🗑️</span>
+          </td>
+        </tr>`;
+      });
+      html += `</table>`;
+      document.getElementById('ispListContent').innerHTML = html;
+    }
+    function showISPForm(id){
+      document.getElementById('ispFormModal').classList.remove('hidden');
+      document.getElementById('ispFormTitle').textContent = id ? "ISP এডিট করুন" : "নতুন ISP যোগ";
+      if(id){
+        let isp = ISPs.find(x=>x.id==id);
+        document.getElementById('ispId').value = isp.id;
+        document.getElementById('ispName').value = isp.name;
+        document.getElementById('ispPackages').value = isp.packages.map(p=>`${p.name},${p.price}`).join('\n');
+      }else{
+        document.getElementById('ispId').value = '';
+        document.getElementById('ispForm').reset();
+      }
+    }
+    function closeISPFormModal(){
+      document.getElementById('ispFormModal').classList.add('hidden');
+    }
+    document.getElementById('ispForm').onsubmit = function(e){
+      e.preventDefault();
+      let id = document.getElementById('ispId').value;
+      let name = document.getElementById('ispName').value.trim();
+      let pkgs = document.getElementById('ispPackages').value.trim().split('\n').filter(x=>x).map(row=>{
+        let [n,p] = row.split(',');
+        return {name:n.trim(), price:+p.trim()};
+      });
+      let obj = { id: id||Date.now(), name, packages: pkgs };
+      if(id){
+        ISPs = ISPs.map(x=>x.id==id?obj:x);
+      }else{
+        ISPs.push(obj);
+      }
+      localStorage.setItem('isps', JSON.stringify(ISPs));
+      closeISPFormModal();
+      renderISPList();
+      syncOnline('isps', ISPs);
+    }
+    function deleteISP(id){
+      if(confirm('আপনি কি ISP ডিলিট করতে চান?')){
+        ISPs = ISPs.filter(x=>x.id!=id);
+        localStorage.setItem('isps', JSON.stringify(ISPs));
+        renderISPList();
+        syncOnline('isps', ISPs);
+      }
+    }
+
+    // --------- Dashboard/User Info/Logo ---------
+    function showDashboard(role, uname){
+      document.getElementById('login-bg').style.display='none';
+      document.getElementById('dashboard').style.display='block';
+      document.getElementById('userRole').innerHTML = `<b>ইউজার:</b> ${uname} <br><b>Role:</b> ${role == 'admin' ? 'Admin' : 'Owner'}`;
+      let logo = localStorage.getItem('appLogo') || "logo.png";
+      document.getElementById('sidebar-logo').src = logo;
+      showSubTab(currentTab);
+    }
+
+    // --------- Online Sync Logic (Firebase) ---------
+    function syncOnline(key, data){
+      // Save to Firebase
+      db.ref(key).set(data);
+    }
+    // Pull from Firebase on connect
+    window.addEventListener('online', ()=>{
+      db.ref('customers').once('value',snap=>{
+        if(snap.exists()){
+          customers = snap.val();
+          saveCustomers();
+          renderSubfolderContent(currentTab);
+        }
+      });
+      db.ref('isps').once('value',snap=>{
+        if(snap.exists()){
+          ISPs = snap.val();
+          localStorage.setItem('isps', JSON.stringify(ISPs));
+          renderISPList();
+        }
+      });
+    });
+    // Initial load (offline/online)
+    if(navigator.onLine){
+      db.ref('customers').once('value',snap=>{
+        if(snap.exists()){
+          customers = snap.val();
+          saveCustomers();
+          renderSubfolderContent(currentTab);
+        }
+      });
+      db.ref('isps').once('value',snap=>{
+        if(snap.exists()){
+          ISPs = snap.val();
+          localStorage.setItem('isps', JSON.stringify(ISPs));
+          renderISPList();
+        }
+      });
+    }
+
+    // --------- Global ---------
+    window.showCustomerModal = showCustomerModal;
+    window.showCustomerDetails = showCustomerDetails;
+    window.deleteCustomer = deleteCustomer;
+    window.payCustomer = payCustomer;
+    window.showSubTab = showSubTab;
+    window.showFolder = showFolder;
+    window.closeCustomerModal = closeCustomerModal;
+    window.closeCustomerDetailsModal = closeCustomerDetailsModal;
+    window.openISPModal = openISPModal;
+    window.closeISPModal = closeISPModal;
+    window.showISPForm = showISPForm;
+    window.closeISPFormModal = closeISPFormModal;
+    window.deleteISP = deleteISP;
+  </script>
+</body>
+</html>
